@@ -8,6 +8,7 @@ load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 MAX_RETRIES = 3
+MAX_PARALLEL_TASKS = 5
 
 
 def get_llm() -> ChatOpenAI:

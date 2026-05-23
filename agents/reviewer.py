@@ -1,4 +1,5 @@
 from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.types import Overwrite
 
 from agents.llm_display import call_llm_with_display
 from agents.parsers import parse_reviewer_response
@@ -33,5 +34,8 @@ def reviewer_node(state: WorkflowState) -> dict:
 
     if parsed["status"] == "rejected":
         result["retry_count"] = state.get("retry_count", 0) + 1
+        result["execution_results"] = Overwrite([])
+        result["execution_result"] = ""
+        result["executor_status"] = None
 
     return result

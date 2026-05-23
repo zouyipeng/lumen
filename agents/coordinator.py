@@ -1,25 +1,19 @@
 from langchain_core.messages import HumanMessage, SystemMessage
-from langgraph.types import interrupt
+from langgraph.types import Overwrite, interrupt
 
 from agents.llm_display import call_llm_with_display
-from agents.parsers import parse_coordinator_response
-from config import MAX_RETRIES, get_llm, load_prompt
+from agents.parsers import parse_coordinator_response, parse_task_items
+from config import MAX_PARALLEL_TASKS, get_llm, load_prompt
 from graph.state import WorkflowState
 
 PHASE_LABELS = {
     "plan": "思考并制定任务计划",
-    "summarize": "思考并汇总最终结果",
-    "summarize_force": "思考并汇总（审核未通过）",
     "replan": "思考并重新制定计划",
     "clarify_replan": "思考并根据用户补充重新规划",
 }
 
 
 def _determine_mode(state: WorkflowState) -> str:
-    if state.get("review_status") == "approved":
-        return "summarize"
-    if state.get("retry_count", 0) >= MAX_RETRIES and state.get("review_status") == "rejected":
-        return "summarize_force"
     if state.get("executor_status") == "failed":
         return "replan"
     if state.get("coordinator_mode") == "clarify_replan":
@@ -35,6 +29,7 @@ def _build_planning_prompt(state: WorkflowState, mode: str) -> str:
             "若仍信息不足，使用 USER_QUESTION: 继续澄清。"
             "若任务无法完成，使用 FINAL_RESPONSE: 直接说明原因。"
             "仅当计划完整可执行时使用 TASK_PLAN: 标记。"
+            "多步骤计划请用编号列表（1. 2. 3.）以便并发执行。"
         )
     if mode == "replan":
         return (
@@ -43,6 +38,7 @@ def _build_planning_prompt(state: WorkflowState, mode: str) -> str:
             f"执行失败原因:\n{state.get('execution_result', '')}\n\n"
             "请根据失败原因重新制定可自动执行的任务计划。"
             "执行阶段无法向用户提问，计划必须完整可执行。使用 TASK_PLAN: 标记。"
+            "多步骤计划请用编号列表（1. 2. 3.）以便并发执行。"
         )
     return (
         f"用户指令:\n{state['user_request']}\n\n"
@@ -50,6 +46,7 @@ def _build_planning_prompt(state: WorkflowState, mode: str) -> str:
         "若信息不足无法制定计划，使用 USER_QUESTION: 向用户澄清。"
         "若任务无法完成，使用 FINAL_RESPONSE: 直接说明原因。"
         "仅当计划完整可执行时使用 TASK_PLAN: 标记。"
+        "多步骤计划请用编号列表（1. 2. 3.）以便并发执行。"
     )
 
 
@@ -59,7 +56,7 @@ def _apply_planning_result(state: WorkflowState, response, parsed: dict) -> dict
             "messages": [response],
             "final_response": parsed["final_response"],
             "next_node": "end",
-            "coordinator_mode": "summarize",
+            "coordinator_mode": "plan_failed",
             "clarify_question": "",
         }
 
@@ -72,9 +69,14 @@ def _apply_planning_result(state: WorkflowState, response, parsed: dict) -> dict
         }
 
     if parsed["mode"] == "plan" and parsed.get("task_plan", "").strip():
+        task_plan = parsed["task_plan"]
+        task_items = parse_task_items(task_plan)[:MAX_PARALLEL_TASKS]
         return {
             "messages": [response],
-            "task_plan": parsed["task_plan"],
+            "task_plan": task_plan,
+            "task_items": task_items,
+            "execution_results": Overwrite([]),
+            "execution_result": "",
             "executor_status": None,
             "review_status": None,
             "next_node": "executor",
@@ -111,54 +113,20 @@ def coordinator_node(state: WorkflowState) -> dict:
     system_prompt = load_prompt("coordinator")
     mode = _determine_mode(state)
 
-    if mode in ("plan", "replan", "clarify_replan"):
-        allow_user_questions = mode in ("plan", "clarify_replan")
-        response = call_llm_with_display(
-            "Coordinator",
-            PHASE_LABELS.get(mode, PHASE_LABELS["plan"]),
-            llm,
-            [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=_build_planning_prompt(state, mode)),
-            ],
-        )
-        parsed = parse_coordinator_response(response.content)
-        if not allow_user_questions and parsed["mode"] == "ask_user":
-            parsed = {
-                "mode": "summarize",
-                "final_response": "执行阶段无法向用户澄清，且当前无法自动生成可执行计划。",
-            }
-        return _apply_planning_result(state, response, parsed)
-
-    if mode == "summarize":
-        user_content = (
-            f"原始用户需求:\n{state['user_request']}\n\n"
-            f"任务计划:\n{state.get('task_plan', '')}\n\n"
-            f"执行结果:\n{state.get('execution_result', '')}\n\n"
-            f"审核摘要:\n{state.get('review_feedback', '')}\n\n"
-            "请汇总以上信息，生成给用户的最终回复。使用 FINAL_RESPONSE: 标记。"
-        )
-    else:
-        user_content = (
-            f"原始用户需求:\n{state['user_request']}\n\n"
-            f"执行结果:\n{state.get('execution_result', '')}\n\n"
-            f"审核反馈（已重试 {state.get('retry_count', 0)} 次仍未通过）:\n"
-            f"{state.get('review_feedback', '')}\n\n"
-            "请汇总当前最佳结果并告知用户审核未完全通过的情况。使用 FINAL_RESPONSE: 标记。"
-        )
-
+    allow_user_questions = mode in ("plan", "clarify_replan")
     response = call_llm_with_display(
         "Coordinator",
-        PHASE_LABELS.get(mode, PHASE_LABELS["summarize"]),
+        PHASE_LABELS.get(mode, PHASE_LABELS["plan"]),
         llm,
-        [SystemMessage(content=system_prompt), HumanMessage(content=user_content)],
+        [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=_build_planning_prompt(state, mode)),
+        ],
     )
     parsed = parse_coordinator_response(response.content)
-
-    return {
-        "messages": [response],
-        "final_response": parsed.get("final_response", response.content),
-        "next_node": "end",
-        "coordinator_mode": "summarize",
-        "clarify_question": "",
-    }
+    if not allow_user_questions and parsed["mode"] == "ask_user":
+        parsed = {
+            "mode": "summarize",
+            "final_response": "执行阶段无法向用户澄清，且当前无法自动生成可执行计划。",
+        }
+    return _apply_planning_result(state, response, parsed)

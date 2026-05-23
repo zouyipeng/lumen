@@ -6,10 +6,11 @@ from agents.parsers import (
     parse_coordinator_response,
     parse_executor_response,
     parse_reviewer_response,
+    parse_task_items,
 )
 from graph.router import (
     route_after_coordinator,
-    route_after_executor,
+    route_after_executor_aggregate,
     route_after_reviewer,
 )
 from langgraph.checkpoint.memory import MemorySaver
@@ -48,6 +49,19 @@ def test_parsers():
     print("[OK] parsers")
 
 
+def test_parse_task_items():
+    single = parse_task_items("读取 main.py 并统计行数")
+    assert single == ["读取 main.py 并统计行数"]
+
+    multi = parse_task_items("1. 读取 main.py\n2. 统计行数\n3. 输出结果")
+    assert len(multi) == 3
+    assert multi[0] == "读取 main.py"
+
+    bullet = parse_task_items("- 读取 config.py\n- 读取 main.py")
+    assert len(bullet) == 2
+    print("[OK] parse_task_items")
+
+
 def test_tools():
     content = read_file.invoke({"path": "main.py"})
     assert "run_workflow" in content
@@ -65,16 +79,17 @@ def test_tools():
 
 
 def test_routing():
-    assert route_after_coordinator({"next_node": "executor"}) == "executor"
+    assert route_after_coordinator({"next_node": "executor", "task_items": ["a"]})[0].node == "executor"
     assert route_after_coordinator({"next_node": "end"}) == "__end__"
     assert route_after_coordinator({"next_node": "clarify"}) == "coordinator_clarify"
 
-    assert route_after_executor({"executor_status": "failed"}) == "coordinator"
-    assert route_after_executor({"executor_status": "success"}) == "reviewer"
+    assert route_after_executor_aggregate({"executor_status": "failed"}) == "coordinator"
+    assert route_after_executor_aggregate({"executor_status": "success"}) == "reviewer"
 
-    assert route_after_reviewer({"review_status": "rejected", "retry_count": 1}) == "executor"
-    assert route_after_reviewer({"review_status": "rejected", "retry_count": 3}) == "coordinator"
-    assert route_after_reviewer({"review_status": "approved", "retry_count": 0}) == "coordinator"
+    retry = route_after_reviewer({"review_status": "rejected", "retry_count": 1, "task_items": ["a"]})
+    assert retry[0].node == "executor"
+    assert route_after_reviewer({"review_status": "rejected", "retry_count": 3}) == "summarizer"
+    assert route_after_reviewer({"review_status": "approved", "retry_count": 0}) == "summarizer"
     print("[OK] routing")
 
 
@@ -84,12 +99,15 @@ def test_graph_compile():
     assert "coordinator" in nodes
     assert "coordinator_clarify" in nodes
     assert "executor" in nodes
+    assert "executor_aggregate" in nodes
     assert "reviewer" in nodes
+    assert "summarizer" in nodes
     print("[OK] graph compile")
 
 
 if __name__ == "__main__":
     test_parsers()
+    test_parse_task_items()
     test_tools()
     test_routing()
     test_graph_compile()

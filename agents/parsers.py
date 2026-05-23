@@ -7,6 +7,25 @@ def extract_section(text: str, marker: str) -> str:
     return match.group(1).strip() if match else ""
 
 
+def parse_task_items(task_plan: str) -> list[str]:
+    """Split a task plan into sub-tasks by numbered or bulleted list items."""
+    if not task_plan or not task_plan.strip():
+        return []
+
+    items: list[str] = []
+    for line in task_plan.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        match = re.match(r"^(?:\d+\.|[-*])\s+(.+)$", stripped)
+        if match:
+            items.append(match.group(1).strip())
+
+    if items:
+        return items
+    return [task_plan.strip()]
+
+
 def parse_coordinator_response(text: str) -> dict:
     if "FINAL_RESPONSE:" in text:
         return {

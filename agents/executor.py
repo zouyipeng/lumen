@@ -47,16 +47,16 @@ def executor_node(state: WorkflowState) -> dict:
     llm = get_llm()
     system_prompt = load_prompt("executor")
 
-    task_context = state.get("task_plan", "")
+    current_task = state.get("current_task") or state.get("task_plan", "")
     if state.get("review_status") == "rejected" and state.get("review_feedback"):
-        task_context = (
-            f"{task_context}\n\n"
+        current_task = (
+            f"{current_task}\n\n"
             f"审核反馈（请根据以下建议重新执行）:\n{state['review_feedback']}"
         )
 
     messages = [
         SystemMessage(content=system_prompt),
-        HumanMessage(content=f"任务计划:\n{task_context}"),
+        HumanMessage(content=f"当前子任务:\n{current_task}"),
     ]
 
     raw_response = _run_tool_loop(llm, messages)
@@ -64,6 +64,12 @@ def executor_node(state: WorkflowState) -> dict:
 
     return {
         "messages": [HumanMessage(content=f"[Executor] {raw_response}")],
-        "execution_result": parsed["content"],
-        "executor_status": parsed["status"],
+        "execution_results": [
+            {
+                "index": state.get("task_index", 0),
+                "task": current_task,
+                "status": parsed["status"],
+                "content": parsed["content"],
+            }
+        ],
     }

@@ -1,8 +1,8 @@
 # Lumen — 项目例行多 Agent 工作流
 
-基于 [LangGraph](https://github.com/langchain-ai/langgraph) 构建的三 Agent 协作工作流，用于处理项目例行任务（读文件、执行命令、代码搜索等）。
+基于 [LangGraph](https://github.com/langchain-ai/langgraph) 构建的四 Agent 协作工作流，用于处理项目例行任务（读文件、执行命令、代码搜索等）。
 
-工作流由 **Coordinator（协调者）**、**Executor（执行者）**、**Reviewer（审核者）** 三个 Agent 组成，支持：
+工作流由 **Coordinator（协调者）**、**Executor（执行者）**、**Reviewer（审核者）**、**Summarizer（汇总者）** 四个 Agent 组成，支持：
 
 - 任务制定阶段的用户澄清（Human-in-the-loop）
 - 执行与审核阶段全自动运行（不再向用户提问）
@@ -17,35 +17,39 @@
 flowchart TD
     START([START]) --> coordinator[Coordinator<br/>协调者]
 
-    coordinator -->|"TASK_PLAN<br/>计划可执行"| executor[Executor<br/>执行者]
+    coordinator -->|"TASK_PLAN<br/>计划可执行"| fanout{{Send fan-out<br/>并行分发}}
     coordinator -->|"USER_QUESTION<br/>信息不足"| clarify[coordinator_clarify<br/>规划阶段澄清]
     coordinator -->|"FINAL_RESPONSE<br/>无法制定计划"| END_NODE([END])
 
     clarify -->|"用户补充信息"| coordinator
 
-    executor -->|"success"| reviewer[Reviewer<br/>审核者]
-    executor -->|"failed"| coordinator
+    fanout --> executor[Executor<br/>执行者]
+    executor --> aggregate[executor_aggregate<br/>汇总执行结果]
+    aggregate -->|"success"| reviewer[Reviewer<br/>审核者]
+    aggregate -->|"failed"| coordinator
 
-    reviewer -->|"approved"| coordinator
-    reviewer -->|"rejected 且未超重试上限"| executor
-    reviewer -->|"rejected 且超重试上限"| coordinator
+    reviewer -->|"approved"| summarizer[Summarizer<br/>汇总者]
+    reviewer -->|"rejected 且未超重试上限"| fanout
+    reviewer -->|"rejected 且超重试上限"| summarizer
 
-    coordinator -->|"审核通过，汇总结果"| END_NODE
+    summarizer --> END_NODE
 ```
 
 ### 各 Agent 职责
 
 | Agent | 职责 | 是否可与用户交互 |
 |-------|------|------------------|
-| **Coordinator** | 理解用户指令、制定任务计划、规划阶段澄清、汇总最终结果 | ✅ 仅任务制定阶段 |
-| **Executor** | 调用工具执行文件读写、命令、代码搜索 | ❌ |
+| **Coordinator** | 理解用户指令、制定任务计划、规划阶段澄清；执行失败时重新规划 | ✅ 仅任务制定阶段 |
+| **Executor** | 调用工具执行文件读写、命令、代码搜索；多个子任务通过 Send 并行 fan-out | ❌ |
 | **Reviewer** | 审核执行结果是否符合预期，不通过则反馈重试 | ❌ |
+| **Summarizer** | 审核通过后汇总执行结果，生成面向用户的最终回复 | ❌ |
 
 ### 关键设计原则
 
 1. **用户交互仅发生在任务制定阶段**：Coordinator 信息不足时使用 `USER_QUESTION` 向用户澄清；无法形成可执行计划时直接 `FINAL_RESPONSE` 结束，不交给 Executor。
 2. **Executor 不得向用户提问**：遇到阻碍时使用 `STATUS: failed` 报告，由 Coordinator 自动重新规划（不再询问用户）。
-3. **Reviewer 拒绝后自动重试**：最多重试 3 次（`config.py` 中 `MAX_RETRIES`），超限后 Coordinator 强制汇总。
+3. **子任务并行执行**：Coordinator 输出的任务计划会被拆分为多个子任务，通过 LangGraph `Send` 并行 fan-out 到多个 Executor，再由 `executor_aggregate` 节点汇总。
+4. **Reviewer 拒绝后自动重试**：最多重试 3 次（`config.py` 中 `MAX_RETRIES`），超限后 Summarizer 强制汇总。
 
 ---
 
