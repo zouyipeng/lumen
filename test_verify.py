@@ -68,7 +68,15 @@ def test_parse_task_items():
 
 
 def test_llm_config():
+    agent_prefixes = ("COORDINATOR", "EXECUTOR", "REVIEWER", "SUMMARIZER")
+    agent_keys = {
+        f"{prefix}_{suffix}"
+        for prefix in agent_prefixes
+        for suffix in ("MODEL_NAME", "API_KEY", "BASE_URL", "TEMPERATURE")
+    }
+    cleared = {key: "" for key in agent_keys}
     env = {
+        **cleared,
         "MODEL_NAME": "global-model",
         "OPENAI_API_KEY": "global-key",
         "OPENAI_BASE_URL": "https://global.example/v1",

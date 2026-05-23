@@ -5,7 +5,7 @@
   "graphs": {
     "ewel": {
       "path": "./graph/workflow.py:graph",
-      "description": "EWEL 项目例行多 Agent 工作流（Coordinator / Executor / Reviewer）"
+      "description": "Lumen 项目例行多 Agent 工作流（Coordinator / Executor / Reviewer / Summarizer）"
     }
   },
   "env": ".env"

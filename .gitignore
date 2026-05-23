@@ -14,9 +14,32 @@
 __pycache__/
 *.py[cod]
 *.pyo
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # LangGraph
 .langgraph_api/
 
 # test / runtime artifacts
 _test_tmp.txt
+
+# accidental LLM marker outputs (write_file misuse)
+TASK_PLAN
+FINAL_RESPONSE
+USER_QUESTION
+THINKING
+STATUS
+RESULT
+ERROR
+REVIEW
+FEEDBACK
+SUMMARY
+
+# OS
+.DS_Store
+Thumbs.db

@@ -377,7 +377,7 @@ python3 test_integration.py
 
 **Q: Agent 误创建了 MARKER 名称的空文件（如 `TASK_PLAN`、`FINAL_RESPONSE`）？**
 
-这是 Executor 的 `write_file` 工具被 LLM 误用导致，直接删除即可。这些文件名已在 `.gitignore` 中忽略 `_test_tmp.txt`，如有需要可手动删除。
+这是 Executor 的 `write_file` 工具被 LLM 误用导致，直接删除即可。常见 marker 文件名（如 `TASK_PLAN`、`FINAL_RESPONSE`）已在 `.gitignore` 中忽略。
 
 **Q: 如何安装 Git commit Signed-off-by hook？**
 
