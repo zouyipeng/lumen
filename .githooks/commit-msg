@@ -1,0 +1,8 @@
+#!/bin/sh
+# Append Signed-off-by if not already present.
+
+SIGNOFF="Signed-off-by: Yipeng Zou <403650485@qq.com>"
+
+grep -q "^Signed-off-by: " "$1" && exit 0
+
+printf '\n%s\n' "$SIGNOFF" >> "$1"
