@@ -1,4 +1,4 @@
-# EWEL — 项目例行多 Agent 工作流
+# Lumen — 项目例行多 Agent 工作流
 
 基于 [LangGraph](https://github.com/langchain-ai/langgraph) 构建的三 Agent 协作工作流，用于处理项目例行任务（读文件、执行命令、代码搜索等）。
 
