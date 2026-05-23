@@ -8,7 +8,7 @@ from graph.state import WorkflowState
 
 
 def reviewer_node(state: WorkflowState) -> dict:
-    llm = get_llm()
+    llm = get_llm("reviewer")
     system_prompt = load_prompt("reviewer")
 
     user_content = (

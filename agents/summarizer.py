@@ -12,7 +12,7 @@ PHASE_LABELS = {
 
 
 def summarizer_node(state: WorkflowState) -> dict:
-    llm = get_llm()
+    llm = get_llm("summarizer")
     system_prompt = load_prompt("summarizer")
 
     if state.get("review_status") == "approved":

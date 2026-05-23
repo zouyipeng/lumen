@@ -109,7 +109,7 @@ Lumen/
 | 文件 | 作用 |
 |------|------|
 | `main.py` | CLI 入口。读取用户指令，启动工作流，处理规划阶段的 interrupt 恢复，打印最终回复。本地运行时使用 `MemorySaver` 作为 checkpointer。 |
-| `config.py` | 加载 `.env`，提供 `get_llm()` 创建 LLM 客户端，`load_prompt()` 读取 `prompts/` 下的 Markdown 文件；`MAX_RETRIES` 控制审核重试上限，`MAX_PARALLEL_TASKS` 控制每批并发子任务数（超出部分排队分批执行）。 |
+| `config.py` | 加载 `.env`，提供 `get_llm(agent)` 按 Agent 创建 LLM 客户端（支持独立 model/api/temperature），`load_prompt()` 读取 `prompts/` 下的 Markdown 文件；`MAX_RETRIES` 控制审核重试上限，`MAX_PARALLEL_TASKS` 控制每批并发子任务数（超出部分排队分批执行）。 |
 | `langgraph.json` | LangGraph dev 配置：指定 graph 路径、依赖、环境变量文件。运行 `langgraph dev` 时使用。 |
 | `pyproject.toml` | Python 包元数据，`langgraph dev` 通过 `"dependencies": ["."]` 安装本项目。 |
 | `requirements.txt` | 运行时 pip 依赖。 |
@@ -233,13 +233,30 @@ Coordinator 与 Reviewer 的重试路径通过 `dispatch_executors()` 向 Execut
 
 ### 修改 LLM 配置
 
-编辑 `.env` 文件：
+编辑 `.env` 文件。各 Agent 可单独配置 model、api_key、base_url、temperature；未设置的项回退到全局默认值。
 
 ```env
+# 全局默认
 OPENAI_API_KEY=your-api-key
-OPENAI_BASE_URL=https://api.openai.com/v1    # 可改为 DeepSeek 等兼容 API
-MODEL_NAME=gpt-4o-mini                        # 可改为 GLM-5 等
+OPENAI_BASE_URL=https://api.openai.com/v1
+MODEL_NAME=gpt-4o-mini
+TEMPERATURE=0
+
+# 按 Agent 覆盖（可选）
+COORDINATOR_MODEL_NAME=gpt-4o
+COORDINATOR_TEMPERATURE=0.2
+
+EXECUTOR_MODEL_NAME=deepseek-chat
+EXECUTOR_API_KEY=sk-...
+EXECUTOR_BASE_URL=https://api.deepseek.com/v1
+EXECUTOR_TEMPERATURE=0
+
+REVIEWER_TEMPERATURE=0
+SUMMARIZER_MODEL_NAME=gpt-4o-mini
+SUMMARIZER_TEMPERATURE=0.3
 ```
+
+代码中通过 `get_llm("coordinator")`、`get_llm("executor")` 等获取对应客户端。
 
 ---
 
@@ -320,11 +337,27 @@ python3 test_integration.py
 
 ## 环境变量
 
+### 全局默认
+
 | 变量 | 说明 | 示例 |
 |------|------|------|
 | `OPENAI_API_KEY` | LLM API Key | `sk-...` |
 | `OPENAI_BASE_URL` | API 基础 URL（兼容 OpenAI 格式的服务） | `https://api.openai.com/v1` |
-| `MODEL_NAME` | 模型名称 | `gpt-4o-mini` / `GLM-5` |
+| `MODEL_NAME` | 默认模型名称 | `gpt-4o-mini` |
+| `TEMPERATURE` | 默认采样温度 | `0` |
+
+### 按 Agent 覆盖（可选）
+
+前缀为 `COORDINATOR`、`EXECUTOR`、`REVIEWER`、`SUMMARIZER`，每个 Agent 支持：
+
+| 变量 | 说明 |
+|------|------|
+| `{AGENT}_MODEL_NAME` | 模型名称，未设置则用 `MODEL_NAME` |
+| `{AGENT}_API_KEY` | API Key，未设置则用 `OPENAI_API_KEY` |
+| `{AGENT}_BASE_URL` | API 地址，未设置则用 `OPENAI_BASE_URL` |
+| `{AGENT}_TEMPERATURE` | 采样温度，未设置则用 `TEMPERATURE` |
+
+示例：`EXECUTOR_MODEL_NAME=deepseek-chat`、`COORDINATOR_TEMPERATURE=0.2`
 
 ---
 

@@ -110,7 +110,7 @@ def coordinator_clarify_node(state: WorkflowState) -> dict:
 
 
 def coordinator_node(state: WorkflowState) -> dict:
-    llm = get_llm()
+    llm = get_llm("coordinator")
     system_prompt = load_prompt("coordinator")
     mode = _determine_mode(state)
 

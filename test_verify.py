@@ -1,6 +1,10 @@
 """验证工作流各组件（无需 LLM API Key）。"""
 
+import os
 import sys
+from unittest.mock import patch
+
+from config import get_llm, resolve_llm_config
 
 from agents.parsers import (
     parse_coordinator_response,
@@ -63,6 +67,38 @@ def test_parse_task_items():
     print("[OK] parse_task_items")
 
 
+def test_llm_config():
+    env = {
+        "MODEL_NAME": "global-model",
+        "OPENAI_API_KEY": "global-key",
+        "OPENAI_BASE_URL": "https://global.example/v1",
+        "TEMPERATURE": "0.1",
+        "EXECUTOR_MODEL_NAME": "exec-model",
+        "EXECUTOR_API_KEY": "exec-key",
+        "EXECUTOR_BASE_URL": "https://exec.example/v1",
+        "EXECUTOR_TEMPERATURE": "0.5",
+        "SUMMARIZER_TEMPERATURE": "0.8",
+    }
+    with patch.dict(os.environ, env, clear=False):
+        get_llm.cache_clear()
+        coordinator = resolve_llm_config("coordinator")
+        assert coordinator["model"] == "global-model"
+        assert coordinator["api_key"] == "global-key"
+        assert coordinator["temperature"] == 0.1
+
+        executor = resolve_llm_config("executor")
+        assert executor["model"] == "exec-model"
+        assert executor["api_key"] == "exec-key"
+        assert executor["base_url"] == "https://exec.example/v1"
+        assert executor["temperature"] == 0.5
+
+        summarizer = resolve_llm_config("summarizer")
+        assert summarizer["model"] == "global-model"
+        assert summarizer["temperature"] == 0.8
+        get_llm.cache_clear()
+    print("[OK] llm config")
+
+
 def test_tools():
     content = read_file.invoke({"path": "main.py"})
     assert "run_workflow" in content
@@ -122,6 +158,7 @@ def test_graph_compile():
 if __name__ == "__main__":
     test_parsers()
     test_parse_task_items()
+    test_llm_config()
     test_tools()
     test_routing()
     test_graph_compile()

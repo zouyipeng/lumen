@@ -44,7 +44,7 @@ def _run_tool_loop(llm, messages: list) -> str:
 
 
 def executor_node(state: WorkflowState) -> dict:
-    llm = get_llm()
+    llm = get_llm("executor")
     system_prompt = load_prompt("executor")
 
     current_task = state.get("current_task") or state.get("task_plan", "")
