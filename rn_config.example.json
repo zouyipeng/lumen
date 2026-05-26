@@ -1,0 +1,59 @@
+{
+  "version": "1.0",
+  "version_cycle": {
+    "test_cutoff_day": 7,
+    "release_day": 15
+  },
+  "repo": {
+    "url": "https://gitlab.example.com/team/project",
+    "local_path": "/path/to/local/repo",
+    "open_source_repo_path": "/path/to/open-source/repo"
+  },
+  "mr_platform": {
+    "type": "mock",
+    "data_path": "mock_mr_data.json",
+    "project_id": ""
+  },
+  "rn_columns": [
+    {
+      "id": "mechanism_changes",
+      "name": "机制变更说明",
+      "description": "从 MR 信息中提取机制变更说明",
+      "peon": {
+        "prompt_file": "prompts/rn/mechanism_changes_peon.md",
+        "model_name": "gpt-4o",
+        "temperature": 0
+      },
+      "reviewer": {
+        "prompt_file": "prompts/rn/mechanism_changes_reviewer.md",
+        "model_name": "gpt-4o-mini",
+        "temperature": 0
+      }
+    },
+    {
+      "id": "open_source_sync",
+      "name": "开源同步",
+      "description": "判断哪些提交需要同步到开源仓库",
+      "peon": {
+        "prompt_file": "prompts/rn/open_source_sync_peon.md",
+        "model_name": "gpt-4o",
+        "temperature": 0
+      },
+      "reviewer": {
+        "prompt_file": "prompts/rn/open_source_sync_reviewer.md",
+        "model_name": "gpt-4o-mini",
+        "temperature": 0
+      }
+    }
+  ],
+  "excel": {
+    "output_path": "release_note.xlsx",
+    "sheet_name": "Release Note"
+  },
+  "workflow": {
+    "max_retries": 3
+  },
+  "incremental": {
+    "existing_excel_path": "release_note.xlsx"
+  }
+}

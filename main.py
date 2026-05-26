@@ -1,18 +1,11 @@
+import argparse
 import logging
-import subprocess
-import sys
 import uuid
 
-try:
-    import readline  # noqa: F401 - improves line editing on Linux/WSL
-except ImportError:
-    pass
-
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.types import Command
 
-from graph.state import make_initial_state
-from graph.workflow import build_workflow
+from graph.rn_state import make_rn_initial_state
+from graph.rn_workflow import build_rn_workflow
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
@@ -20,83 +13,41 @@ logging.getLogger("openai").setLevel(logging.WARNING)
 logging.getLogger("langchain").setLevel(logging.WARNING)
 
 
-def reset_terminal() -> None:
-    """Reset terminal state after subprocess or library output."""
-    if not sys.stdin.isatty():
-        return
-    try:
-        subprocess.run(["stty", "sane"], check=False, capture_output=True)
-    except OSError:
-        pass
+def main():
+    parser = argparse.ArgumentParser(description="Release Note 生成工作流")
+    parser.add_argument("--repo", required=True, help="仓库 URL")
+    parser.add_argument("--version", required=True, help="版本周期标识（如 2024-06 或 v3.2.0）")
+    parser.add_argument("--config", default="rn_config.json", help="RN 配置文件路径")
+    parser.add_argument("--mode", choices=["full", "incremental"], default="full",
+                        help="生成模式：full=全量, incremental=增量")
+    parser.add_argument("--existing-excel", default="",
+                        help="增量模式下的已有 Excel 文件路径（默认使用配置中的 output_path）")
+    args = parser.parse_args()
 
-
-def prompt_user(title: str, prompt: str = "> ") -> str:
-    """Print prompt and read a line with stable terminal behavior."""
-    reset_terminal()
-    print(title, flush=True)
-    sys.stdout.flush()
-    sys.stderr.flush()
-    return input(prompt).strip()
-
-
-def run_workflow(user_request: str) -> str:
-    graph = build_workflow(checkpointer=MemorySaver())
+    graph = build_rn_workflow(checkpointer=MemorySaver())
     thread_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
 
-    initial_state = make_initial_state(user_request)
+    initial_state = make_rn_initial_state(
+        args.repo, args.version, args.config,
+        mode=args.mode, existing_excel_path=args.existing_excel,
+    )
 
     print(f"\n{'=' * 60}")
-    print(f"用户指令: {user_request}")
+    print(f"版本周期: {args.version}")
+    print(f"仓库: {args.repo}")
+    print(f"配置: {args.config}")
+    print(f"模式: {args.mode}")
+    if args.mode == "incremental" and args.existing_excel:
+        print(f"已有 Excel: {args.existing_excel}")
     print(f"{'=' * 60}")
 
     result = graph.invoke(initial_state, config)
 
-    while True:
-        snapshot = graph.get_state(config)
-        if not snapshot.next:
-            break
-
-        if snapshot.tasks and snapshot.tasks[0].interrupts:
-            interrupt_value = snapshot.tasks[0].interrupts[0].value
-            question = (
-                interrupt_value.get("question", str(interrupt_value))
-                if isinstance(interrupt_value, dict)
-                else str(interrupt_value)
-            )
-            user_reply = prompt_user(
-                f"\n{'-' * 40}\n[任务规划] 需要您的输入:\n{question}"
-            )
-            if not user_reply:
-                user_reply = "(用户未提供输入)"
-            result = graph.invoke(
-                Command(resume={"user_reply": user_reply}),
-                config,
-            )
-        else:
-            result = graph.invoke(None, config)
-
-    final = result.get("final_response", "")
-    if not final:
-        final = result.get("execution_result", "工作流已完成，但未生成最终回复。")
-
     print(f"\n{'=' * 60}")
-    print("最终回复:")
+    print("最终结果:")
     print(f"{'=' * 60}")
-    print(final)
-    return final
-
-
-def main():
-    if len(sys.argv) > 1:
-        user_request = " ".join(sys.argv[1:])
-    else:
-        user_request = prompt_user("请输入项目例行指令:")
-        if not user_request:
-            print("错误: 未提供指令")
-            sys.exit(1)
-
-    run_workflow(user_request)
+    print(result.get("final_response", "工作流已完成，但未生成最终回复。"))
 
 
 if __name__ == "__main__":

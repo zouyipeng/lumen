@@ -1,8 +1,7 @@
-import json
 import sys
-from typing import Any, Callable
+from typing import Any
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage
 
 
 def _to_ai_message(gathered: BaseMessage) -> AIMessage:
@@ -19,7 +18,6 @@ def _to_ai_message(gathered: BaseMessage) -> AIMessage:
 DIM = "\033[2m"
 CYAN = "\033[36m"
 YELLOW = "\033[33m"
-GREEN = "\033[32m"
 RESET = "\033[0m"
 
 
@@ -113,39 +111,3 @@ def call_llm_with_display(
     if gathered is None:
         return AIMessage(content="")
     return _to_ai_message(gathered)
-
-
-def print_tool_call(tool_name: str, args: dict) -> None:
-    args_text = json.dumps(args, ensure_ascii=False)
-    print(_c(GREEN, f"  -> 调用工具: {tool_name}({args_text})"), flush=True)
-
-
-def print_tool_result(result: str, max_len: int = 300) -> None:
-    display = result if len(result) <= max_len else result[:max_len] + "..."
-    print(_c(DIM, f"  <- 工具结果: {display}"), flush=True)
-
-
-def call_agent(
-    agent_name: str,
-    phase: str,
-    llm: Any,
-    user_content: str,
-    parse_fn: Callable[[str], dict],
-) -> tuple[AIMessage, dict]:
-    """Common agent call pattern: load prompt, call LLM, parse response.
-
-    The caller is responsible for obtaining the LLM instance (via get_llm)
-    so that test patching per-agent-module continues to work.
-    """
-    from config import load_prompt
-
-    system_prompt = load_prompt(agent_name)
-    label = agent_name.capitalize()
-    response = call_llm_with_display(
-        label,
-        phase,
-        llm,
-        [SystemMessage(content=system_prompt), HumanMessage(content=user_content)],
-    )
-    parsed = parse_fn(response.content)
-    return response, parsed

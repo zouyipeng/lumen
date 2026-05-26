@@ -1,5 +1,5 @@
+import json
 import os
-from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -8,10 +8,6 @@ from langchain_openai import ChatOpenAI
 load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-MAX_RETRIES = 3
-MAX_PARALLEL_TASKS = 5
-
-AGENT_NAMES = ("coordinator", "executor", "reviewer", "summarizer")
 
 
 def _read_env(key: str, default: str | None = None) -> str | None:
@@ -21,36 +17,23 @@ def _read_env(key: str, default: str | None = None) -> str | None:
     return value
 
 
-def resolve_llm_config(agent: str) -> dict:
-    """Resolve LLM settings for an agent, falling back to global env vars."""
-    prefix = agent.upper()
-    temperature_raw = (
-        _read_env(f"{prefix}_TEMPERATURE")
-        or _read_env("TEMPERATURE")
-        or "0"
-    )
-    return {
-        "model": _read_env(f"{prefix}_MODEL_NAME") or _read_env("MODEL_NAME", "gpt-4o-mini"),
-        "api_key": _read_env(f"{prefix}_API_KEY") or _read_env("OPENAI_API_KEY"),
-        "base_url": _read_env(f"{prefix}_BASE_URL") or _read_env("OPENAI_BASE_URL"),
-        "temperature": float(temperature_raw),
-    }
-
-
-@lru_cache(maxsize=len(AGENT_NAMES))
-def get_llm(agent: str) -> ChatOpenAI:
-    if agent not in AGENT_NAMES:
-        raise ValueError(f"Unknown agent: {agent}. Expected one of {AGENT_NAMES}")
-
-    settings = resolve_llm_config(agent)
+def get_llm_with_config(agent_config: dict) -> ChatOpenAI:
+    """Create LLM instance from column-level config (independent model/temperature/api_key)."""
     return ChatOpenAI(
-        model=settings["model"],
-        api_key=settings["api_key"],
-        base_url=settings["base_url"],
-        temperature=settings["temperature"],
+        model=agent_config.get("model_name") or _read_env("MODEL_NAME", "gpt-4o-mini"),
+        api_key=agent_config.get("api_key") or _read_env("OPENAI_API_KEY"),
+        base_url=agent_config.get("base_url") or _read_env("OPENAI_BASE_URL"),
+        temperature=float(agent_config.get("temperature", 0)),
     )
 
 
-def load_prompt(name: str) -> str:
-    path = PROJECT_ROOT / "prompts" / f"{name}.md"
-    return path.read_text(encoding="utf-8")
+def load_prompt_from_file(path: str) -> str:
+    """Load prompt file from absolute or project-relative path."""
+    p = Path(path) if Path(path).is_absolute() else PROJECT_ROOT / path
+    return p.read_text(encoding="utf-8")
+
+
+def load_rn_config(config_path: str) -> dict:
+    """Load RN configuration JSON file."""
+    p = Path(config_path) if Path(config_path).is_absolute() else PROJECT_ROOT / config_path
+    return json.loads(p.read_text(encoding="utf-8"))

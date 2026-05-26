@@ -3,9 +3,9 @@
   "python_version": "3.12",
   "dependencies": ["."],
   "graphs": {
-    "ewel": {
-      "path": "./graph/workflow.py:graph",
-      "description": "Lumen 项目例行多 Agent 工作流（Coordinator / Executor / Reviewer / Summarizer）"
+    "rn": {
+      "path": "./graph/rn_workflow.py:rn_graph",
+      "description": "Release Note 生成工作流（Hero / Peon / Reviewer / Integrator）"
     }
   },
   "env": ".env"
