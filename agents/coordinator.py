@@ -1,10 +1,10 @@
 from langchain_core.messages import HumanMessage, SystemMessage
-from langgraph.types import Overwrite, interrupt
+from langgraph.types import interrupt
 
 from agents.llm_display import call_llm_with_display
 from agents.parsers import parse_coordinator_response, parse_task_items
 from config import get_llm, load_prompt
-from graph.state import WorkflowState
+from graph.state import WorkflowState, reset_execution_state
 
 PHASE_LABELS = {
     "plan": "思考并制定任务计划",
@@ -72,14 +72,10 @@ def _apply_planning_result(state: WorkflowState, response, parsed: dict) -> dict
         task_plan = parsed["task_plan"]
         task_items = parse_task_items(task_plan)
         return {
+            **reset_execution_state(),
             "messages": [response],
             "task_plan": task_plan,
             "task_items": task_items,
-            "task_batch_offset": 0,
-            "execution_results": Overwrite([]),
-            "execution_result": "",
-            "executor_status": None,
-            "review_status": None,
             "next_node": "executor",
             "coordinator_mode": "plan",
             "clarify_question": "",

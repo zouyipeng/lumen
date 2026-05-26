@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage, AIMessageChunk
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
+from graph.state import make_initial_state
 from graph.workflow import build_workflow
 
 
@@ -31,25 +32,7 @@ def _make_llm(responses: list[str]):
 
 
 def _base_state(user_request: str) -> dict:
-    return {
-        "messages": [],
-        "user_request": user_request,
-        "task_plan": "",
-        "task_items": [],
-        "current_task": "",
-        "task_index": 0,
-        "task_batch_offset": 0,
-        "execution_results": [],
-        "execution_result": "",
-        "review_feedback": "",
-        "review_status": None,
-        "executor_status": None,
-        "retry_count": 0,
-        "final_response": "",
-        "next_node": "executor",
-        "coordinator_mode": "plan",
-        "clarify_question": "",
-    }
+    return make_initial_state(user_request)
 
 
 def test_happy_path():

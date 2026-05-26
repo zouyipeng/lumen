@@ -1,27 +1,16 @@
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
 from langchain_core.tools import tool
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+from config import PROJECT_ROOT
 
-ALLOWED_COMMAND_PREFIXES = (
-    "git ",
-    "pytest",
-    "ruff ",
-    "python ",
-    "python3 ",
-    "ls ",
-    "ls",
-    "cat ",
-    "find ",
-    "grep ",
-    "wc ",
-    "tree ",
-    "pip ",
-    "pip3 ",
-)
+ALLOWED_COMMANDS = frozenset({
+    "git", "pytest", "ruff", "python", "python3",
+    "ls", "cat", "find", "grep", "wc", "tree", "pip", "pip3",
+})
 
 
 def _resolve_path(path: str) -> Path:
@@ -51,16 +40,23 @@ def write_file(path: str, content: str) -> str:
 
 @tool
 def run_shell_command(command: str) -> str:
-    """执行 shell 命令（仅限白名单前缀：git, pytest, ruff, python, ls, cat, find, grep, wc, tree, pip）。"""
+    """执行 shell 命令（仅限白名单：git, pytest, ruff, python, ls, cat, find, grep, wc, tree, pip）。"""
     command = command.strip()
-    if not any(command.startswith(prefix) for prefix in ALLOWED_COMMAND_PREFIXES):
-        allowed = ", ".join(sorted(set(p.strip() for p in ALLOWED_COMMAND_PREFIXES)))
-        return f"错误: 命令不在白名单中。允许的前缀: {allowed}"
+    try:
+        parts = shlex.split(command)
+    except ValueError as exc:
+        return f"错误: 命令解析失败 - {exc}"
+
+    if not parts:
+        return "错误: 空命令"
+
+    if parts[0] not in ALLOWED_COMMANDS:
+        allowed = ", ".join(sorted(ALLOWED_COMMANDS))
+        return f"错误: 命令不在白名单中。允许的命令: {allowed}"
 
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            parts,
             cwd=PROJECT_ROOT,
             capture_output=True,
             text=True,

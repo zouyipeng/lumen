@@ -1,8 +1,6 @@
-from langchain_core.messages import HumanMessage, SystemMessage
-
-from agents.llm_display import call_llm_with_display
-from agents.parsers import parse_coordinator_response
-from config import get_llm, load_prompt
+from agents.llm_display import call_agent
+from agents.parsers import parse_summarizer_response
+from config import get_llm
 from graph.state import WorkflowState
 
 PHASE_LABELS = {
@@ -12,9 +10,6 @@ PHASE_LABELS = {
 
 
 def summarizer_node(state: WorkflowState) -> dict:
-    llm = get_llm("summarizer")
-    system_prompt = load_prompt("summarizer")
-
     if state.get("review_status") == "approved":
         mode = "summarize"
         user_content = (
@@ -34,16 +29,10 @@ def summarizer_node(state: WorkflowState) -> dict:
             "请汇总当前最佳结果并告知用户审核未完全通过的情况。使用 FINAL_RESPONSE: 标记。"
         )
 
-    response = call_llm_with_display(
-        "Summarizer",
-        PHASE_LABELS.get(mode, PHASE_LABELS["summarize"]),
-        llm,
-        [SystemMessage(content=system_prompt), HumanMessage(content=user_content)],
-    )
-    parsed = parse_coordinator_response(response.content)
+    response, parsed = call_agent("summarizer", PHASE_LABELS.get(mode, PHASE_LABELS["summarize"]), get_llm("summarizer"), user_content, parse_summarizer_response)
 
     return {
         "messages": [response],
-        "final_response": parsed.get("final_response", response.content),
+        "final_response": parsed["final_response"],
         "next_node": "end",
     }

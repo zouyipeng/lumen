@@ -8,13 +8,11 @@ try:
 except ImportError:
     pass
 
-from dotenv import load_dotenv
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
+from graph.state import make_initial_state
 from graph.workflow import build_workflow
-
-load_dotenv()
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
@@ -46,25 +44,7 @@ def run_workflow(user_request: str) -> str:
     thread_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
 
-    initial_state = {
-        "messages": [],
-        "user_request": user_request,
-        "task_plan": "",
-        "task_items": [],
-        "current_task": "",
-        "task_index": 0,
-        "task_batch_offset": 0,
-        "execution_results": [],
-        "execution_result": "",
-        "review_feedback": "",
-        "review_status": None,
-        "executor_status": None,
-        "retry_count": 0,
-        "final_response": "",
-        "next_node": "executor",
-        "coordinator_mode": "plan",
-        "clarify_question": "",
-    }
+    initial_state = make_initial_state(user_request)
 
     print(f"\n{'=' * 60}")
     print(f"用户指令: {user_request}")

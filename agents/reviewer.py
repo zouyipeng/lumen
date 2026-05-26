@@ -1,16 +1,10 @@
-from langchain_core.messages import HumanMessage, SystemMessage
-from langgraph.types import Overwrite
-
-from agents.llm_display import call_llm_with_display
+from agents.llm_display import call_agent
 from agents.parsers import parse_reviewer_response
-from config import get_llm, load_prompt
-from graph.state import WorkflowState
+from config import get_llm
+from graph.state import WorkflowState, reset_execution_state
 
 
 def reviewer_node(state: WorkflowState) -> dict:
-    llm = get_llm("reviewer")
-    system_prompt = load_prompt("reviewer")
-
     user_content = (
         f"原始用户需求:\n{state['user_request']}\n\n"
         f"任务计划:\n{state.get('task_plan', '')}\n\n"
@@ -18,13 +12,7 @@ def reviewer_node(state: WorkflowState) -> dict:
         "请审核执行结果是否符合预期。"
     )
 
-    response = call_llm_with_display(
-        "Reviewer",
-        "思考并审核执行结果",
-        llm,
-        [SystemMessage(content=system_prompt), HumanMessage(content=user_content)],
-    )
-    parsed = parse_reviewer_response(response.content)
+    response, parsed = call_agent("reviewer", "思考并审核执行结果", get_llm("reviewer"), user_content, parse_reviewer_response)
 
     result: dict = {
         "messages": [response],
@@ -34,9 +22,6 @@ def reviewer_node(state: WorkflowState) -> dict:
 
     if parsed["status"] == "rejected":
         result["retry_count"] = state.get("retry_count", 0) + 1
-        result["execution_results"] = Overwrite([])
-        result["execution_result"] = ""
-        result["executor_status"] = None
-        result["task_batch_offset"] = 0
+        result.update(reset_execution_state())
 
     return result

@@ -23,3 +23,39 @@ class WorkflowState(TypedDict):
     next_node: str
     coordinator_mode: str
     clarify_question: str
+
+
+def make_initial_state(user_request: str) -> dict:
+    """Create a WorkflowState dict with sensible defaults."""
+    return {
+        "messages": [],
+        "user_request": user_request,
+        "task_plan": "",
+        "task_items": [],
+        "current_task": "",
+        "task_index": 0,
+        "task_batch_offset": 0,
+        "execution_results": [],
+        "execution_result": "",
+        "review_feedback": "",
+        "review_status": None,
+        "executor_status": None,
+        "retry_count": 0,
+        "final_response": "",
+        "next_node": "executor",
+        "coordinator_mode": "plan",
+        "clarify_question": "",
+    }
+
+
+def reset_execution_state() -> dict:
+    """Return a state patch that resets execution-related fields for retry."""
+    from langgraph.types import Overwrite
+
+    return {
+        "execution_results": Overwrite([]),
+        "execution_result": "",
+        "executor_status": None,
+        "review_status": None,
+        "task_batch_offset": 0,
+    }
