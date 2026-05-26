@@ -37,3 +37,16 @@ def load_rn_config(config_path: str) -> dict:
     """Load RN configuration JSON file."""
     p = Path(config_path) if Path(config_path).is_absolute() else PROJECT_ROOT / config_path
     return json.loads(p.read_text(encoding="utf-8"))
+
+
+def resolve_excel_path(path_template: str, version_cycle: str) -> str:
+    """Resolve Excel output path, replacing {version} with version_cycle."""
+    return path_template.replace("{version}", version_cycle)
+
+
+def resolve_project_path(path: str) -> Path:
+    """Resolve absolute or project-relative path."""
+    p = Path(path)
+    if p.is_absolute():
+        return p
+    return PROJECT_ROOT / p

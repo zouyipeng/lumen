@@ -7,14 +7,22 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from config import get_llm_with_config, load_rn_config, load_prompt_from_file
+from config import get_llm_with_config, load_rn_config, load_prompt_from_file, resolve_excel_path
 from graph.rn_router import route_after_hero
 from graph.rn_state import make_rn_initial_state
 from graph.rn_workflow import build_rn_workflow
 from langgraph.checkpoint.memory import MemorySaver
 from tools.git_tools import git_log
 from tools.mr_platform import MockMRPlatform, get_platform
-from tools.excel_tools import write_excel, read_excel
+from tools.excel_tools import (
+    copy_template,
+    get_excel_layout,
+    read_excel_with_layout,
+    write_excel,
+    read_excel,
+    write_excel_with_layout,
+    _col_to_index,
+)
 
 
 def test_rn_config():
@@ -26,7 +34,79 @@ def test_rn_config():
     assert len(config["rn_columns"]) == 2
     assert config["rn_columns"][0]["id"] == "mechanism_changes"
     assert config["rn_columns"][1]["id"] == "open_source_sync"
+    assert config["excel"]["template_path"] == "templates/release_note_template.xlsx"
+    assert "{version}" in config["excel"]["output_path"]
+    assert config["excel"]["layout"]["data_start_row"] == 6
     print("[OK] rn config")
+
+
+def test_resolve_excel_path():
+    """测试 Excel 输出路径占位符替换。"""
+    assert resolve_excel_path("output/release_note_{version}.xlsx", "2024-06") == (
+        "output/release_note_2024-06.xlsx"
+    )
+    assert resolve_excel_path("release_note.xlsx", "2024-06") == "release_note.xlsx"
+    print("[OK] resolve excel path")
+
+
+def test_col_to_index():
+    """测试 Excel 列字母/数字转换。"""
+    assert _col_to_index("A") == 1
+    assert _col_to_index("E") == 5
+    assert _col_to_index(5) == 5
+    assert _col_to_index("26") == 26
+    print("[OK] col to index")
+
+
+def test_template_excel_layout():
+    """测试模板 Excel 复制与 layout 读写。"""
+    config = load_rn_config("rn_config.example.json")
+    excel_config = config["excel"]
+    layout = get_excel_layout(excel_config, ["mechanism_changes", "open_source_sync"])
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output = os.path.join(tmpdir, "release_note_2024-06.xlsx")
+        copy_result = copy_template(excel_config["template_path"], output)
+        assert "成功" in copy_result
+        assert Path(output).exists()
+
+        commits = [{
+            "hash": "abc1234",
+            "short_hash": "abc1234",
+            "message": "feat: add feature",
+            "author": "test",
+            "date": "2024-06-01",
+        }]
+        column_results = [{
+            "column_id": "mechanism_changes",
+            "column_name": "机制变更说明",
+            "peon_output": "",
+            "structured_result": {"abc1234": "新增了XXX功能"},
+            "review_status": "approved",
+            "review_feedback": "",
+            "retry_count": 0,
+        }]
+
+        write_result = write_excel_with_layout(
+            output,
+            excel_config["sheet_name"],
+            layout,
+            commits,
+            column_results,
+            metadata=excel_config.get("metadata"),
+            metadata_values={"version": "2024-06", "cycle_start": "2024-05-16", "cycle_end": "2024-06-07"},
+        )
+        assert "成功" in write_result
+
+        parsed = read_excel_with_layout(
+            output, excel_config["sheet_name"], layout, config["rn_columns"]
+        )
+        assert len(parsed["commits"]) == 1
+        assert parsed["commits"][0]["short_hash"] == "abc1234"
+        assert parsed["last_commit_hash"] == "abc1234"
+        assert parsed["column_results"][0]["structured_result"]["abc1234"] == "新增了XXX功能"
+
+    print("[OK] template excel layout")
 
 
 def test_rn_initial_state():
@@ -244,6 +324,9 @@ def test_load_prompt_from_file():
 
 if __name__ == "__main__":
     test_rn_config()
+    test_resolve_excel_path()
+    test_col_to_index()
+    test_template_excel_layout()
     test_rn_initial_state()
     test_route_after_hero()
     test_git_log()

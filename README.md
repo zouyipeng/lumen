@@ -120,8 +120,10 @@ python3 main.py --repo /path/to/repo --version 2024-06 --config rn_config.json
 
 ```bash
 python3 main.py --repo /path/to/repo --version 2024-06 --config rn_config.json \
-    --mode incremental --existing-excel release_note.xlsx
+    --mode incremental
 ```
+
+未指定 `--existing-excel` 时，自动使用配置中 `output_path` 解析后的版本文件路径（如 `output/release_note_2024-06.xlsx`）。
 
 增量模式下，工作流会：
 1. 读取已有 Excel，提取最后一条 commit hash
@@ -137,7 +139,7 @@ python3 main.py --repo /path/to/repo --version 2024-06 --config rn_config.json \
 | `--version` | 是 | 版本周期标识（如 `2024-06`） |
 | `--config` | 否 | RN 配置文件路径，默认 `rn_config.json` |
 | `--mode` | 否 | 生成模式：`full`（全量）或 `incremental`（增量），默认 `full` |
-| `--existing-excel` | 否 | 增量模式下的已有 Excel 文件路径（默认使用配置中的 `output_path`） |
+| `--existing-excel` | 否 | 增量模式下的已有 Excel 文件路径（默认按 `output_path` + `{version}` 自动解析） |
 
 ### LangGraph Studio 调试
 
@@ -178,17 +180,43 @@ python3 test_rn_integration.py
   },
   "rn_columns": [...],
   "excel": {
-    "output_path": "release_note.xlsx",
-    "sheet_name": "Release Note"
+    "template_path": "templates/release_note_template.xlsx",
+    "output_path": "output/release_note_{version}.xlsx",
+    "sheet_name": "Release Note",
+    "layout": {
+      "header_row": 5,
+      "data_start_row": 6,
+      "commit_fields": {
+        "short_hash": "A",
+        "message": "B",
+        "author": "C",
+        "date": "D"
+      },
+      "rn_columns": {
+        "mechanism_changes": "E",
+        "open_source_sync": "F"
+      }
+    },
+    "metadata": {
+      "version": "B1",
+      "cycle_start": "B2",
+      "cycle_end": "B3"
+    }
   },
   "workflow": {
     "max_retries": 3
-  },
-  "incremental": {
-    "existing_excel_path": "release_note.xlsx"
   }
 }
 ```
+
+### Excel 模板与布局
+
+- `template_path`：RN 格式模板 Excel，全量生成时从模板复制到输出路径，保留样式与表头
+- `output_path`：输出文件路径，支持 `{version}` 占位符（由 `--version` 替换）
+- `layout`：数据区行列映射；`commit_fields` 映射 commit 字段到列，`rn_columns` 映射 RN 列 id 到列（字母或 1-based 数字）
+- `metadata`（可选）：元信息单元格，全量生成时写入版本与周期日期；增量更新时保留已有值
+
+未配置 `template_path` 时，回退到从零创建 Excel 的旧行为。
 
 ### 版本周期计算
 

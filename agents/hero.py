@@ -1,9 +1,9 @@
 import json
 import warnings
 
-from config import load_rn_config
+from config import load_rn_config, resolve_excel_path
 from graph.rn_state import RNWorkflowState
-from tools.excel_tools import read_excel
+from tools.excel_tools import get_excel_layout, read_excel, read_excel_with_layout
 from tools.git_tools import git_log
 from tools.mr_platform import get_platform
 
@@ -18,13 +18,10 @@ def _compute_cycle_dates(version_cycle: str, config: dict) -> tuple[str, str]:
     release_day = cycle_config.get("release_day", 15)
     test_cutoff_day = cycle_config.get("test_cutoff_day", 7)
 
-    # Parse version_cycle as year-month
     year, month = map(int, version_cycle.split("-"))
 
-    # End date: this month's test_cutoff_day
     end_date = f"{year}-{month:02d}-{test_cutoff_day:02d}"
 
-    # Start date: previous month's (release_day + 1)
     prev_month = month - 1
     prev_year = year
     if prev_month == 0:
@@ -35,11 +32,8 @@ def _compute_cycle_dates(version_cycle: str, config: dict) -> tuple[str, str]:
     return start_date, end_date
 
 
-def _parse_existing_excel(excel_path: str, sheet_name: str) -> tuple[list[dict], list[dict], str]:
-    """Read existing Excel and extract commits, column results, and last commit hash.
-
-    Returns (existing_commits, existing_column_results, last_commit_hash).
-    """
+def _parse_existing_excel_legacy(excel_path: str, sheet_name: str) -> tuple[list[dict], list[dict], str]:
+    """Legacy: read Excel with hardcoded first-4-column layout."""
     existing_commits = []
     existing_column_results = []
     last_commit_hash = ""
@@ -49,7 +43,7 @@ def _parse_existing_excel(excel_path: str, sheet_name: str) -> tuple[list[dict],
     try:
         data = json.loads(excel_json) if isinstance(excel_json, str) else excel_json
     except json.JSONDecodeError:
-        warnings.warn(f"读取已有 Excel 失败，将执行全量模式")
+        warnings.warn("读取已有 Excel 失败，将执行全量模式")
         return existing_commits, existing_column_results, last_commit_hash
 
     columns = data.get("columns", [])
@@ -58,27 +52,20 @@ def _parse_existing_excel(excel_path: str, sheet_name: str) -> tuple[list[dict],
     if not columns or not rows:
         return existing_commits, existing_column_results, last_commit_hash
 
-    # First 4 columns are: 提交哈希, 提交信息, 作者, 日期
-    # Remaining columns are RN column values
     rn_column_names = columns[4:]
 
-    # Build existing_commits from rows
     for row in rows:
         if len(row) < 4:
             continue
         short_hash = row[0]
-        message = row[1]
-        author = row[2]
-        date = row[3]
         existing_commits.append({
-            "hash": short_hash,  # We only have short_hash from Excel
+            "hash": short_hash,
             "short_hash": short_hash,
-            "author": author,
-            "date": date,
-            "message": message,
+            "author": row[2],
+            "date": row[3],
+            "message": row[1],
         })
 
-    # Build existing_column_results from columns + rows
     for col_idx, col_name in enumerate(rn_column_names, start=4):
         structured = {}
         for row in rows:
@@ -97,16 +84,40 @@ def _parse_existing_excel(excel_path: str, sheet_name: str) -> tuple[list[dict],
             "retry_count": 0,
         })
 
-    # Last commit hash from the last row
     if existing_commits:
         last_commit_hash = existing_commits[-1]["hash"]
 
     return existing_commits, existing_column_results, last_commit_hash
 
 
+def _parse_existing_excel(excel_path: str, config: dict) -> tuple[list[dict], list[dict], str]:
+    """Read existing Excel using layout config or legacy fallback."""
+    excel_config = config.get("excel", {})
+    sheet_name = excel_config.get("sheet_name", "Release Note")
+    rn_column_defs = config.get("rn_columns", [])
+    rn_column_ids = [c["id"] for c in rn_column_defs]
+    layout = get_excel_layout(excel_config, rn_column_ids)
+
+    if excel_config.get("template_path") or excel_config.get("layout"):
+        parsed = read_excel_with_layout(excel_path, sheet_name, layout, rn_column_defs)
+        return (
+            parsed["commits"],
+            parsed["column_results"],
+            parsed["last_commit_hash"],
+        )
+
+    return _parse_existing_excel_legacy(excel_path, sheet_name)
+
+
+def _resolve_existing_excel_path(state: RNWorkflowState, excel_config: dict) -> str:
+    if state.get("existing_excel_path"):
+        return state["existing_excel_path"]
+    output_template = excel_config.get("output_path", "release_note.xlsx")
+    return resolve_excel_path(output_template, state["version_cycle"])
+
+
 def hero_node(state: RNWorkflowState) -> dict:
     """Hero agent: load config, fetch commits and MRs for the version cycle."""
-    # 1. Load RN config
     config = load_rn_config(state["rn_config_path"])
     mode = state.get("mode", "full")
 
@@ -153,19 +164,16 @@ def _hero_full(state: RNWorkflowState, config: dict) -> dict:
 def _hero_incremental(state: RNWorkflowState, config: dict) -> dict:
     """Incremental mode: read existing Excel, fetch only new commits and MRs."""
     excel_config = config.get("excel", {})
-    existing_excel_path = state.get("existing_excel_path") or excel_config.get("output_path", "")
-    sheet_name = excel_config.get("sheet_name", "Release Note")
+    existing_excel_path = _resolve_existing_excel_path(state, excel_config)
 
-    # 1. Read existing Excel
     existing_commits, existing_column_results, last_commit_hash = _parse_existing_excel(
-        existing_excel_path, sheet_name
+        existing_excel_path, config
     )
 
     if not last_commit_hash:
         warnings.warn("增量模式无法从已有 Excel 中提取最后 commit hash，回退到全量模式")
         return _hero_full(state, config)
 
-    # 2. Fetch incremental commits since last_commit_hash
     repo_config = config.get("repo", {})
     local_path = repo_config.get("local_path", "")
     commits_json = git_log.invoke({
@@ -181,7 +189,6 @@ def _hero_incremental(state: RNWorkflowState, config: dict) -> dict:
         warnings.warn("git_log 增量返回的 JSON 解析失败，已跳过提交记录")
         commits = []
 
-    # 3. Fetch MRs since last commit date
     last_commit_date = ""
     if existing_commits:
         last_commit_date = existing_commits[-1].get("date", "")[:10]
@@ -195,14 +202,12 @@ def _hero_incremental(state: RNWorkflowState, config: dict) -> dict:
     if last_commit_date:
         try:
             platform = get_platform(platform_type, data_path=data_path)
-            # Fetch MRs from last commit date to today
             from datetime import date
             today = date.today().isoformat()
             mr_list = platform.fetch_mrs(project_id, last_commit_date, today)
         except Exception as exc:
             warnings.warn(f"获取增量 MR 列表失败: {exc}")
 
-    # 4. Compute cycle dates for display (use existing range or recompute)
     start_date, end_date = _compute_cycle_dates(state["version_cycle"], config)
 
     return {

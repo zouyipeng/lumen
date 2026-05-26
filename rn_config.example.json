@@ -47,13 +47,30 @@
     }
   ],
   "excel": {
-    "output_path": "release_note.xlsx",
-    "sheet_name": "Release Note"
+    "template_path": "templates/release_note_template.xlsx",
+    "output_path": "output/release_note_{version}.xlsx",
+    "sheet_name": "Release Note",
+    "layout": {
+      "header_row": 5,
+      "data_start_row": 6,
+      "commit_fields": {
+        "short_hash": "A",
+        "message": "B",
+        "author": "C",
+        "date": "D"
+      },
+      "rn_columns": {
+        "mechanism_changes": "E",
+        "open_source_sync": "F"
+      }
+    },
+    "metadata": {
+      "version": "B1",
+      "cycle_start": "B2",
+      "cycle_end": "B3"
+    }
   },
   "workflow": {
     "max_retries": 3
-  },
-  "incremental": {
-    "existing_excel_path": "release_note.xlsx"
   }
 }

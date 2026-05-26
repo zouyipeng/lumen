@@ -31,8 +31,35 @@ def _make_llm(responses: list[str]):
     return mock_llm
 
 
-def _make_config(tmpdir: str, mr_data_path: str = "") -> str:
+def _make_config(tmpdir: str, mr_data_path: str = "", *, use_template: bool = False) -> str:
     """Create a temporary RN config file."""
+    if use_template:
+        excel_config = {
+            "template_path": "templates/release_note_template.xlsx",
+            "output_path": os.path.join(tmpdir, "release_note_{version}.xlsx"),
+            "sheet_name": "Release Note",
+            "layout": {
+                "header_row": 5,
+                "data_start_row": 6,
+                "commit_fields": {
+                    "short_hash": "A",
+                    "message": "B",
+                    "author": "C",
+                    "date": "D",
+                },
+                "rn_columns": {"mechanism_changes": "E"},
+            },
+            "metadata": {
+                "version": "B1",
+                "cycle_start": "B2",
+                "cycle_end": "B3",
+            },
+        }
+    else:
+        excel_config = {
+            "output_path": os.path.join(tmpdir, "release_note.xlsx"),
+            "sheet_name": "Release Note",
+        }
     config = {
         "version": "1.0",
         "version_cycle": {"test_cutoff_day": 7, "release_day": 15},
@@ -63,10 +90,7 @@ def _make_config(tmpdir: str, mr_data_path: str = "") -> str:
                 },
             },
         ],
-        "excel": {
-            "output_path": os.path.join(tmpdir, "release_note.xlsx"),
-            "sheet_name": "Release Note",
-        },
+        "excel": excel_config,
         "workflow": {"max_retries": 1},
     }
     config_path = os.path.join(tmpdir, "rn_config.json")
@@ -221,10 +245,46 @@ def test_rn_incremental_mode():
     print("[OK] rn incremental mode")
 
 
+def test_rn_template_mode():
+    """模板模式：从模板复制生成版本 Excel，保留表头格式。"""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = _make_config(tmpdir, use_template=True)
+        output_excel = os.path.join(tmpdir, "release_note_2024-06.xlsx")
+
+        peon_llm = _make_llm([
+            "STATUS: success\nRESULT:\n{\"all\": \"模板模式变更说明\"}",
+        ])
+        reviewer_llm = _make_llm([
+            "REVIEW: approved\nSUMMARY:\n通过",
+        ])
+
+        with patch("agents.peon.get_llm_with_config", return_value=peon_llm):
+            with patch("agents.column_reviewer.get_llm_with_config", return_value=reviewer_llm):
+                graph = build_rn_workflow(checkpointer=MemorySaver())
+                state = make_rn_initial_state(".", "2024-06", config_path)
+                result = graph.invoke(
+                    state,
+                    {"configurable": {"thread_id": "test-rn-template"}},
+                )
+
+                assert result["excel_path"] == output_excel
+                assert Path(output_excel).exists()
+
+                from openpyxl import load_workbook
+                wb = load_workbook(output_excel)
+                ws = wb["Release Note"]
+                assert ws.cell(row=5, column=1).value == "提交哈希"
+                assert ws["B1"].value == "2024-06"
+                wb.close()
+
+    print("[OK] rn template mode")
+
+
 if __name__ == "__main__":
     test_rn_happy_path()
     test_rn_reviewer_reject_then_approve()
     test_rn_max_retries_exceeded()
     test_rn_incremental_mode()
+    test_rn_template_mode()
     print("\n所有 RN 集成路径验证通过。")
     sys.exit(0)

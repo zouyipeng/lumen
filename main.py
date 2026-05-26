@@ -38,8 +38,14 @@ def main():
     print(f"仓库: {args.repo}")
     print(f"配置: {args.config}")
     print(f"模式: {args.mode}")
-    if args.mode == "incremental" and args.existing_excel:
-        print(f"已有 Excel: {args.existing_excel}")
+    if args.mode == "incremental":
+        from config import load_rn_config, resolve_excel_path
+        rn_config = load_rn_config(args.config)
+        excel_path = args.existing_excel or resolve_excel_path(
+            rn_config.get("excel", {}).get("output_path", "release_note.xlsx"),
+            args.version,
+        )
+        print(f"已有 Excel: {excel_path}")
     print(f"{'=' * 60}")
 
     result = graph.invoke(initial_state, config)
