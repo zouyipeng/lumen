@@ -61,7 +61,7 @@ class RNWorkflowState(TypedDict):
     final_response: str
 
 
-def make_rn_initial_state(repo_url: str, version_cycle: str, rn_config_path: str,
+def make_rn_initial_state(repo_url: str = "", version_cycle: str = "", rn_config_path: str = "",
                           *, mode: str = "full", existing_excel_path: str = "") -> dict:
     """Create a RNWorkflowState dict with sensible defaults."""
     return {

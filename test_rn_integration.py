@@ -62,7 +62,7 @@ def _make_config(tmpdir: str, mr_data_path: str = "", *, use_template: bool = Fa
         }
     config = {
         "version": "1.0",
-        "version_cycle": {"test_cutoff_day": 7, "release_day": 15},
+        "version_cycle": {"current": "2024-06", "test_cutoff_day": 7, "release_day": 15},
         "repo": {
             "url": "https://example.com/repo",
             "local_path": ".",
@@ -91,7 +91,7 @@ def _make_config(tmpdir: str, mr_data_path: str = "", *, use_template: bool = Fa
             },
         ],
         "excel": excel_config,
-        "workflow": {"max_retries": 1},
+        "workflow": {"max_retries": 1, "mode": "full", "existing_excel": ""},
     }
     config_path = os.path.join(tmpdir, "rn_config.json")
     with open(config_path, "w") as f:

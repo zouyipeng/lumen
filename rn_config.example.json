@@ -1,6 +1,7 @@
 {
   "version": "1.0",
   "version_cycle": {
+    "current": "2024-06",
     "test_cutoff_day": 7,
     "release_day": 15
   },
@@ -71,6 +72,8 @@
     }
   },
   "workflow": {
-    "max_retries": 3
+    "max_retries": 3,
+    "mode": "full",
+    "existing_excel": ""
   }
 }

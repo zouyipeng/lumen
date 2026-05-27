@@ -44,6 +44,33 @@ def resolve_excel_path(path_template: str, version_cycle: str) -> str:
     return path_template.replace("{version}", version_cycle)
 
 
+def resolve_rn_params(config: dict, *,
+                      repo_url: str | None = None,
+                      version_cycle: str | None = None,
+                      mode: str | None = None,
+                      existing_excel: str | None = None) -> dict:
+    """Resolve RN workflow parameters: CLI args override config values.
+
+    Returns a dict with keys: repo_url, version_cycle, mode, existing_excel.
+    Raises ValueError if version_cycle cannot be resolved from either source.
+    """
+    resolved_repo_url = repo_url or config.get("repo", {}).get("url", "")
+    resolved_version = version_cycle or config.get("version_cycle", {}).get("current", "")
+    if not resolved_version:
+        raise ValueError(
+            "version_cycle 未指定。请通过 --version 参数或在配置文件 version_cycle.current 中设置。"
+        )
+    resolved_mode = mode or config.get("workflow", {}).get("mode", "full")
+    resolved_existing_excel = existing_excel or config.get("workflow", {}).get("existing_excel", "")
+
+    return {
+        "repo_url": resolved_repo_url,
+        "version_cycle": resolved_version,
+        "mode": resolved_mode,
+        "existing_excel": resolved_existing_excel,
+    }
+
+
 def resolve_project_path(path: str) -> Path:
     """Resolve absolute or project-relative path."""
     p = Path(path)

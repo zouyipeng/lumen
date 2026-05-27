@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from config import get_llm_with_config, load_rn_config, load_prompt_from_file, resolve_excel_path
+from config import get_llm_with_config, load_rn_config, load_prompt_from_file, resolve_excel_path, resolve_rn_params
 from graph.rn_router import route_after_hero
 from graph.rn_state import make_rn_initial_state
 from graph.rn_workflow import build_rn_workflow
@@ -29,6 +29,7 @@ def test_rn_config():
     """测试 RN 配置加载。"""
     config = load_rn_config("rn_config.example.json")
     assert config["version"] == "1.0"
+    assert config["version_cycle"]["current"] == "2024-06"
     assert config["version_cycle"]["test_cutoff_day"] == 7
     assert config["version_cycle"]["release_day"] == 15
     assert len(config["rn_columns"]) == 2
@@ -121,6 +122,12 @@ def test_rn_initial_state():
     assert state["mode"] == "full"
     assert state["existing_excel_path"] == ""
     assert state["existing_commits"] == []
+
+    # Default values
+    state_default = make_rn_initial_state()
+    assert state_default["repo_url"] == ""
+    assert state_default["version_cycle"] == ""
+    assert state_default["rn_config_path"] == ""
 
     # Incremental mode
     state_inc = make_rn_initial_state("https://example.com/repo", "2024-06", "rn_config.json",
@@ -315,6 +322,41 @@ def test_get_llm_with_config():
     print("[OK] get llm with config")
 
 
+def test_resolve_rn_params():
+    """测试参数解析：CLI 覆盖配置。"""
+    config = {
+        "version_cycle": {"current": "2024-06", "release_day": 15, "test_cutoff_day": 7},
+        "repo": {"url": "https://gitlab.example.com/team/project"},
+        "workflow": {"mode": "full", "existing_excel": "", "max_retries": 3},
+    }
+
+    # 全部从配置读取
+    params = resolve_rn_params(config)
+    assert params["repo_url"] == "https://gitlab.example.com/team/project"
+    assert params["version_cycle"] == "2024-06"
+    assert params["mode"] == "full"
+    assert params["existing_excel"] == ""
+
+    # CLI 覆盖
+    params = resolve_rn_params(config, version_cycle="2024-07", mode="incremental")
+    assert params["version_cycle"] == "2024-07"
+    assert params["mode"] == "incremental"
+
+    # 配置中无 current，CLI 也不提供 → 报错
+    config_no_current = {"version_cycle": {"release_day": 15, "test_cutoff_day": 7}}
+    try:
+        resolve_rn_params(config_no_current)
+        assert False, "应抛出 ValueError"
+    except ValueError as e:
+        assert "version_cycle" in str(e)
+
+    # 配置中无 current，但 CLI 提供 → 正常
+    params = resolve_rn_params(config_no_current, version_cycle="2025-01")
+    assert params["version_cycle"] == "2025-01"
+
+    print("[OK] resolve rn params")
+
+
 def test_load_prompt_from_file():
     """测试从文件加载提示词。"""
     content = load_prompt_from_file("prompts/rn/hero.md")
@@ -336,6 +378,7 @@ if __name__ == "__main__":
     test_git_log_since_commit()
     test_rn_graph_compile()
     test_get_llm_with_config()
+    test_resolve_rn_params()
     test_load_prompt_from_file()
     print("\n所有 RN 组件验证通过。")
     sys.exit(0)
