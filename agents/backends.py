@@ -1,0 +1,174 @@
+import shlex
+import subprocess
+
+import httpx
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+
+
+class CLIBackend:
+    """LLM backend that calls a CLI tool via subprocess."""
+
+    def __init__(
+        self,
+        cli_command: str | list[str],
+        timeout: int = 120,
+        cli_stdin: bool = False,
+    ):
+        if isinstance(cli_command, str):
+            self._cmd_prefix = shlex.split(cli_command)
+        else:
+            self._cmd_prefix = list(cli_command)
+        self._timeout = timeout
+        self._cli_stdin = cli_stdin
+
+    def invoke(self, messages: list[BaseMessage]) -> AIMessage:
+        prompt = self._build_prompt(messages)
+        try:
+            if self._cli_stdin:
+                result = subprocess.run(
+                    self._cmd_prefix,
+                    input=prompt,
+                    capture_output=True,
+                    text=True,
+                    timeout=self._timeout,
+                )
+            else:
+                result = subprocess.run(
+                    self._cmd_prefix + [prompt],
+                    capture_output=True,
+                    text=True,
+                    timeout=self._timeout,
+                )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"CLI backend timed out after {self._timeout}s")
+        except FileNotFoundError:
+            raise RuntimeError(f"CLI command not found: {self._cmd_prefix[0]}")
+
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"CLI backend failed (exit {result.returncode}): {result.stderr.strip()}"
+            )
+        return AIMessage(content=result.stdout)
+
+    def stream(self, messages: list[BaseMessage]):
+        """Yield AIMessage chunks line-by-line from subprocess stdout."""
+        prompt = self._build_prompt(messages)
+        try:
+            if self._cli_stdin:
+                proc = subprocess.Popen(
+                    self._cmd_prefix,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                proc.stdin.write(prompt)
+                proc.stdin.close()
+            else:
+                proc = subprocess.Popen(
+                    self._cmd_prefix + [prompt],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+        except FileNotFoundError:
+            raise RuntimeError(f"CLI command not found: {self._cmd_prefix[0]}")
+
+        try:
+            for line in proc.stdout:
+                yield AIMessage(content=line)
+            proc.wait(timeout=self._timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            raise RuntimeError(f"CLI backend timed out after {self._timeout}s")
+
+        if proc.returncode != 0:
+            stderr = proc.stderr.read()
+            raise RuntimeError(
+                f"CLI backend failed (exit {proc.returncode}): {stderr.strip()}"
+            )
+
+    @staticmethod
+    def _build_prompt(messages: list[BaseMessage]) -> str:
+        """Combine SystemMessage + HumanMessage into a single prompt string."""
+        parts = []
+        for msg in messages:
+            if isinstance(msg, SystemMessage):
+                parts.append(f"[System Instructions]\n{msg.content}")
+            elif isinstance(msg, HumanMessage):
+                parts.append(f"[User Message]\n{msg.content}")
+            else:
+                parts.append(str(msg.content))
+        return "\n\n".join(parts)
+
+
+class HTTPBackend:
+    """LLM backend that calls an HTTP API endpoint."""
+
+    def __init__(
+        self,
+        url: str,
+        headers: dict | None = None,
+        timeout: int = 120,
+        model_name: str = "",
+        response_path: str = "choices.0.message.content",
+    ):
+        self._url = url
+        self._headers = headers or {}
+        self._timeout = timeout
+        self._model_name = model_name
+        self._response_path = response_path
+
+    def invoke(self, messages: list[BaseMessage]) -> AIMessage:
+        payload = self._build_payload(messages)
+        try:
+            resp = httpx.post(
+                self._url,
+                json=payload,
+                headers=self._headers,
+                timeout=self._timeout,
+            )
+            resp.raise_for_status()
+        except httpx.TimeoutException:
+            raise RuntimeError(f"HTTP backend timed out after {self._timeout}s")
+        except httpx.HTTPStatusError as e:
+            raise RuntimeError(
+                f"HTTP backend error {e.response.status_code}: {e.response.text}"
+            )
+
+        content = self._extract_content(resp.json())
+        return AIMessage(content=content)
+
+    def stream(self, messages: list[BaseMessage]):
+        """Non-streaming fallback: invoke and yield single chunk."""
+        result = self.invoke(messages)
+        yield result
+
+    def _build_payload(self, messages: list[BaseMessage]) -> dict:
+        """Build OpenAI-compatible request payload."""
+        formatted = []
+        for msg in messages:
+            role = "user"
+            if msg.type == "system":
+                role = "system"
+            elif msg.type == "ai":
+                role = "assistant"
+            formatted.append({"role": role, "content": msg.content})
+        payload = {"messages": formatted}
+        if self._model_name:
+            payload["model"] = self._model_name
+        return payload
+
+    def _extract_content(self, data: dict) -> str:
+        """Extract content from response using configurable path."""
+        keys = self._response_path.split(".")
+        current = data
+        for key in keys:
+            if isinstance(current, dict):
+                current = current.get(key, "")
+            elif isinstance(current, list) and key.isdigit():
+                idx = int(key)
+                current = current[idx] if idx < len(current) else ""
+            else:
+                return str(current)
+        return str(current) if current else ""

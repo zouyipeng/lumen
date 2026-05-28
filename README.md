@@ -68,6 +68,7 @@ Lumen/
 │   ├── kernel_expert.py                 # 内核专家：构造复现用例 & 维测方案
 │   ├── test_expert.py                   # 测试专家：复现验证
 │   ├── knowledge_base.py               # 知识库生成：总结归档
+│   ├── backends.py                      # Agent 后端实现（OpenAI / CLI / HTTP）
 │   └── llm_display.py                   # LLM 流式输出与 thinking 展示
 │
 ├── graph/                               # LangGraph 图定义
@@ -176,10 +177,62 @@ langgraph dev
 
 | 字段 | 说明 |
 |------|------|
-| `api_key` | LLM API Key（必填） |
+| `backend` | 后端类型：`"openai"`(默认) / `"cli"` / `"http"` |
+| `api_key` | LLM API Key（openai 后端必填） |
 | `base_url` | API 基础 URL |
 | `model_name` | 默认模型名称 |
 | `temperature` | 默认采样温度 |
+
+### 后端类型
+
+每个 Agent 可通过 `backend` 字段选择不同的调用后端：
+
+#### OpenAI 后端（默认）
+
+通过 OpenAI 兼容 API 调用 LLM，配置字段同上。
+
+#### CLI 后端
+
+调用本地 CLI 工具（如 `claude`、`opencode`），适用于 coding agent：
+
+| 字段 | 说明 |
+|------|------|
+| `backend` | 设为 `"cli"` |
+| `cli_command` | 命令前缀，如 `"claude -p"` 或 `["claude", "-p"]` |
+| `cli_timeout` | 超时秒数（默认 120） |
+| `cli_stdin` | 通过 stdin 传入 prompt（默认 false，适用于长 prompt 避免 OS 参数长度限制） |
+
+示例：
+```json
+"kernel_expert": {
+  "backend": "cli",
+  "cli_command": "claude -p",
+  "cli_timeout": 180,
+  "prompt_file": "prompts/maintenance/kernel_expert.md"
+}
+```
+
+#### HTTP 后端
+
+调用 HTTP API 端点：
+
+| 字段 | 说明 |
+|------|------|
+| `backend` | 设为 `"http"` |
+| `http_url` | API 端点 URL |
+| `http_headers` | 自定义 HTTP 头（可选） |
+| `http_timeout` | 超时秒数（默认 120） |
+| `http_response_path` | 响应内容提取路径，dot-notation（默认 `"choices.0.message.content"`） |
+
+示例：
+```json
+"test_expert": {
+  "backend": "http",
+  "http_url": "http://localhost:8080/v1/chat/completions",
+  "http_headers": {"Authorization": "Bearer local-token"},
+  "prompt_file": "prompts/maintenance/test_expert.md"
+}
+```
 
 ### Agent 配置
 
@@ -188,6 +241,7 @@ langgraph dev
 | 字段 | 说明 |
 |------|------|
 | `prompt_file` | 系统提示词文件路径 |
+| `backend` | 后端类型（可选，默认使用 default.backend） |
 | `model_name` | 使用的模型名称 |
 | `temperature` | 采样温度 |
 | `api_key` | 独立 API Key（可选，默认使用 default.api_key） |

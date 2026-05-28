@@ -1,6 +1,7 @@
 {
   "version": "1.0",
   "default": {
+    "backend": "openai",
     "api_key": "your-api-key-here",
     "base_url": "https://api.openai.com/v1",
     "model_name": "gpt-4o-mini",
@@ -18,9 +19,10 @@
       "temperature": 0
     },
     "kernel_expert": {
-      "prompt_file": "prompts/maintenance/kernel_expert.md",
-      "model_name": "gpt-4o",
-      "temperature": 0
+      "backend": "cli",
+      "cli_command": "claude -p",
+      "cli_timeout": 180,
+      "prompt_file": "prompts/maintenance/kernel_expert.md"
     },
     "test_expert": {
       "prompt_file": "prompts/maintenance/test_expert.md",

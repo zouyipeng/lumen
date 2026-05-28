@@ -3,18 +3,49 @@ from pathlib import Path
 
 from langchain_openai import ChatOpenAI
 
+from agents.backends import CLIBackend, HTTPBackend
+
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 
-def get_llm_with_config(agent_config: dict, *, default_config: dict | None = None) -> ChatOpenAI:
-    """Create LLM instance from agent-level config, falling back to default_config."""
+def get_llm_with_config(agent_config: dict, *, default_config: dict | None = None):
+    """Create LLM backend instance from agent-level config, falling back to default_config.
+
+    Returns one of: ChatOpenAI, CLIBackend, HTTPBackend
+    depending on the 'backend' field in config.
+    """
     defaults = default_config or {}
-    return ChatOpenAI(
-        model=agent_config.get("model_name") or defaults.get("model_name", "gpt-4o-mini"),
-        api_key=agent_config.get("api_key") or defaults.get("api_key", ""),
-        base_url=agent_config.get("base_url") or defaults.get("base_url"),
-        temperature=float(agent_config.get("temperature", defaults.get("temperature", 0))),
-    )
+    backend = agent_config.get("backend") or defaults.get("backend", "openai")
+
+    if backend == "openai":
+        return ChatOpenAI(
+            model=agent_config.get("model_name") or defaults.get("model_name", "gpt-4o-mini"),
+            api_key=agent_config.get("api_key") or defaults.get("api_key", ""),
+            base_url=agent_config.get("base_url") or defaults.get("base_url"),
+            temperature=float(agent_config.get("temperature", defaults.get("temperature", 0))),
+        )
+    elif backend == "cli":
+        cli_command = agent_config.get("cli_command") or defaults.get("cli_command", "")
+        if not cli_command:
+            raise ValueError("CLI backend requires 'cli_command' in config")
+        return CLIBackend(
+            cli_command=cli_command,
+            timeout=int(agent_config.get("cli_timeout", defaults.get("cli_timeout", 120))),
+            cli_stdin=bool(agent_config.get("cli_stdin", defaults.get("cli_stdin", False))),
+        )
+    elif backend == "http":
+        url = agent_config.get("http_url") or defaults.get("http_url", "")
+        if not url:
+            raise ValueError("HTTP backend requires 'http_url' in config")
+        return HTTPBackend(
+            url=url,
+            headers=agent_config.get("http_headers") or defaults.get("http_headers"),
+            timeout=int(agent_config.get("http_timeout", defaults.get("http_timeout", 120))),
+            model_name=agent_config.get("model_name") or defaults.get("model_name", ""),
+            response_path=agent_config.get("http_response_path") or defaults.get("http_response_path", "choices.0.message.content"),
+        )
+    else:
+        raise ValueError(f"Unknown backend type: {backend!r}. Expected 'openai', 'cli', or 'http'.")
 
 
 def load_prompt_from_file(path: str) -> str:
