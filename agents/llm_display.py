@@ -8,7 +8,7 @@ def _to_ai_message(gathered: BaseMessage) -> AIMessage:
     if isinstance(gathered, AIMessage):
         return gathered
     return AIMessage(
-        content=gathered.content or "",
+        content=getattr(gathered, "content", str(gathered)) or "",
         additional_kwargs=getattr(gathered, "additional_kwargs", {}) or {},
         response_metadata=getattr(gathered, "response_metadata", {}) or {},
         tool_calls=getattr(gathered, "tool_calls", None) or [],
@@ -102,12 +102,18 @@ def call_llm_with_display(
         print(flush=True)
         return response
 
-    gathered = None
+    gathered_parts: list[str] = []
     for chunk in stream_fn(messages):
         _stream_chunk(chunk)
-        gathered = chunk if gathered is None else gathered + chunk
+        content = getattr(chunk, "content", None)
+        if isinstance(content, str):
+            gathered_parts.append(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, str):
+                    gathered_parts.append(part)
+                elif isinstance(part, dict) and part.get("type") == "text":
+                    gathered_parts.append(part.get("text", ""))
 
     print(flush=True)
-    if gathered is None:
-        return AIMessage(content="")
-    return _to_ai_message(gathered)
+    return AIMessage(content="".join(gathered_parts))

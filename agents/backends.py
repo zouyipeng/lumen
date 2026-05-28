@@ -136,7 +136,18 @@ class HTTPBackend:
                 f"HTTP backend error {e.response.status_code}: {e.response.text}"
             )
 
-        content = self._extract_content(resp.json())
+        try:
+            data = resp.json()
+        except Exception:
+            raise RuntimeError(
+                f"HTTP backend returned non-JSON response (status {resp.status_code}): {resp.text[:500]}"
+            )
+
+        content = self._extract_content(data)
+        if not content:
+            raise RuntimeError(
+                f"HTTP backend returned empty content (response_path={self._response_path!r}): {str(data)[:500]}"
+            )
         return AIMessage(content=content)
 
     def stream(self, messages: list[BaseMessage]):
