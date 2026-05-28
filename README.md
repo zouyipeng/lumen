@@ -59,9 +59,7 @@ Lumen/
 ├── config.py                            # 全局配置：LLM 初始化、Prompt 加载
 ├── langgraph.json                       # LangGraph dev / Studio 配置文件
 ├── maintenance_config.example.json       # 工作流配置示例
-├── pyproject.toml                       # Python 包定义
 ├── requirements.txt                     # 运行时依赖
-├── .env.example                         # 环境变量模板
 │
 ├── agents/                              # Agent 节点实现
 │   ├── validator.py                     # Validator：校验用户输入
@@ -101,8 +99,8 @@ Lumen/
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env
-# 编辑 .env，填入 OPENAI_API_KEY 等
+cp maintenance_config.example.json maintenance_config.json
+# 编辑 maintenance_config.json，填入 default.api_key 等
 ```
 
 ### CLI 命令行
@@ -134,6 +132,12 @@ langgraph dev
 
 ```json
 {
+  "default": {
+    "api_key": "your-api-key-here",
+    "base_url": "https://api.openai.com/v1",
+    "model_name": "gpt-4o-mini",
+    "temperature": 0
+  },
   "agents": {
     "validator": {
       "prompt_file": "prompts/maintenance/validator.md",
@@ -166,6 +170,17 @@ langgraph dev
 }
 ```
 
+### 默认配置
+
+`default` 块定义全局默认值，所有 Agent 未单独配置时自动回退：
+
+| 字段 | 说明 |
+|------|------|
+| `api_key` | LLM API Key（必填） |
+| `base_url` | API 基础 URL |
+| `model_name` | 默认模型名称 |
+| `temperature` | 默认采样温度 |
+
 ### Agent 配置
 
 每个 Agent 可独立配置：
@@ -175,8 +190,8 @@ langgraph dev
 | `prompt_file` | 系统提示词文件路径 |
 | `model_name` | 使用的模型名称 |
 | `temperature` | 采样温度 |
-| `api_key` | 独立 API Key（可选，默认使用环境变量） |
-| `base_url` | 独立 API Base URL（可选） |
+| `api_key` | 独立 API Key（可选，默认使用 default.api_key） |
+| `base_url` | 独立 API Base URL（可选，默认使用 default.base_url） |
 
 ### 工具专家配置
 
@@ -194,19 +209,6 @@ langgraph dev
 1. 在 `prompts/maintenance/` 下新建提示词文件
 2. 在配置文件的 `tool_experts` 数组中添加专家定义
 3. 无需修改代码
-
----
-
-## 环境变量
-
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `OPENAI_API_KEY` | LLM API Key | （必填） |
-| `OPENAI_BASE_URL` | API 基础 URL | 无 |
-| `MODEL_NAME` | 默认模型名称 | `gpt-4o-mini` |
-| `TEMPERATURE` | 默认采样温度 | `0` |
-
-每个 Agent 可通过配置文件中的 `model_name`、`temperature`、`api_key`、`base_url` 独立覆盖。
 
 ---
 

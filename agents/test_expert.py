@@ -9,7 +9,8 @@ def test_expert_node(state: MaintenanceWorkflowState) -> dict:
     """测试专家 agent：根据内核专家给出的复现用例进行问题复现验证。"""
     config = state.get("config", {})
     agent_config = config.get("agents", {}).get("test_expert", {})
-    llm = get_llm_with_config(agent_config)
+    default_config = config.get("default", {})
+    llm = get_llm_with_config(agent_config, default_config=default_config)
     system_prompt = load_prompt_from_file(
         agent_config.get("prompt_file", "prompts/maintenance/test_expert.md")
     )
@@ -67,7 +68,8 @@ def _generate_improvement_suggestions(state: MaintenanceWorkflowState, test_resu
     """根据已有分析结果生成改进建议。"""
     config = state.get("config", {})
     agent_config = config.get("agents", {}).get("test_expert", {})
-    llm = get_llm_with_config(agent_config)
+    default_config = config.get("default", {})
+    llm = get_llm_with_config(agent_config, default_config=default_config)
     system_prompt = load_prompt_from_file(
         agent_config.get("prompt_file", "prompts/maintenance/test_expert.md")
     )

@@ -9,7 +9,8 @@ def kernel_expert_node(state: MaintenanceWorkflowState) -> dict:
     """内核专家 agent：根据工具专家的输出，结合代码分析，构造必现用例并给出内核维测方案。"""
     config = state.get("config", {})
     agent_config = config.get("agents", {}).get("kernel_expert", {})
-    llm = get_llm_with_config(agent_config)
+    default_config = config.get("default", {})
+    llm = get_llm_with_config(agent_config, default_config=default_config)
     system_prompt = load_prompt_from_file(
         agent_config.get("prompt_file", "prompts/maintenance/kernel_expert.md")
     )

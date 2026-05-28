@@ -35,7 +35,8 @@ def tool_expert_node(state: MaintenanceWorkflowState) -> dict:
         }
 
     agent_config = expert_config.get("agent", {})
-    llm = get_llm_with_config(agent_config)
+    default_config = config.get("default", {})
+    llm = get_llm_with_config(agent_config, default_config=default_config)
     system_prompt = load_prompt_from_file(
         agent_config.get("prompt_file", f"prompts/maintenance/{expert_type}.md")
     )

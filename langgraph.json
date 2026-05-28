@@ -7,6 +7,5 @@
       "path": "./graph/rn_workflow.py:maintenance_graph",
       "description": "维护接口人工作流（Validator / PM / Tool Expert / Kernel Expert / Test Expert / Knowledge Base）"
     }
-  },
-  "env": ".env"
+  }
 }

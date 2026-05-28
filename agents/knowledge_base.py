@@ -12,7 +12,8 @@ def knowledge_base_node(state: MaintenanceWorkflowState) -> dict:
     """知识库生成 agent：将问题总结并形成知识库文件进行归档。"""
     config = state.get("config", {})
     agent_config = config.get("agents", {}).get("knowledge_base", {})
-    llm = get_llm_with_config(agent_config)
+    default_config = config.get("default", {})
+    llm = get_llm_with_config(agent_config, default_config=default_config)
     system_prompt = load_prompt_from_file(
         agent_config.get("prompt_file", "prompts/maintenance/knowledge_base.md")
     )

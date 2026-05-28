@@ -1,29 +1,19 @@
 import json
-import os
 from pathlib import Path
 
-from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
-
-load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 
-def _read_env(key: str, default: str | None = None) -> str | None:
-    value = os.getenv(key)
-    if value is None or value == "":
-        return default
-    return value
-
-
-def get_llm_with_config(agent_config: dict) -> ChatOpenAI:
-    """Create LLM instance from agent-level config (independent model/temperature/api_key)."""
+def get_llm_with_config(agent_config: dict, *, default_config: dict | None = None) -> ChatOpenAI:
+    """Create LLM instance from agent-level config, falling back to default_config."""
+    defaults = default_config or {}
     return ChatOpenAI(
-        model=agent_config.get("model_name") or _read_env("MODEL_NAME", "gpt-4o-mini"),
-        api_key=agent_config.get("api_key") or _read_env("OPENAI_API_KEY"),
-        base_url=agent_config.get("base_url") or _read_env("OPENAI_BASE_URL"),
-        temperature=float(agent_config.get("temperature", 0)),
+        model=agent_config.get("model_name") or defaults.get("model_name", "gpt-4o-mini"),
+        api_key=agent_config.get("api_key") or defaults.get("api_key", ""),
+        base_url=agent_config.get("base_url") or defaults.get("base_url"),
+        temperature=float(agent_config.get("temperature", defaults.get("temperature", 0))),
     )
 
 
